@@ -1,0 +1,30 @@
+name: Evals
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: evals-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  evals:
+    name: Eval suite + regression baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/benchy-eval
+        with:
+          suite: examples/demo/benchy.yaml
+          baseline: benchy-baseline.json
+
+      - name: Upload run store
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchy-store
+          path: .benchy
+          if-no-files-found: ignore
