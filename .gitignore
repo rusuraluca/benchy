@@ -1,0 +1,13 @@
+node_modules/
+dist/
+coverage/
+examples/demo-app/node_modules/
+examples/demo-app/dist/
+.benchy/
+*.db
+*.db-wal
+*.db-shm
+.DS_Store
+*.log
+.env
+.env.local
