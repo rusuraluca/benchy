@@ -3,6 +3,8 @@
 A drop-in eval suite for LLM apps. Define cases in YAML, point it at your endpoint, and let
 `benchy` run them, score the answers, track pass rate / latency / cost over time, and **fail CI
 when a new model version regresses** — all locally, with SQLite, no external services.
+It doesn't care what your call is fronted by: your own backend, an OpenAI-compatible gateway,
+or Google's Gemini (Generative Language API) directly.
 
 ```bash
 npm ci && npm run build && npm link   # installs the `benchy` binary
@@ -40,12 +42,34 @@ bench.yaml ──► runner (YAML cases ──► HTTP calls to your app)
                           └─► benchy serve  (dashboard: pass rate, p50/p95, cost)
 ```
 
+### What actually happens when you run `benchy run`
+
+Six steps, every time:
+
+1. **Load.** `benchy.yaml` is parsed (imports, pricing, judge config included) and every case
+   gets validated at load time: duplicate ids, missing `expected`, bad schema — the run never
+   starts with a broken suite.
+2. **Call.** Each case becomes an HTTP request (method, path, headers, JSON body) to the
+   target. Cases run in parallel (up to `concurrency: 3`); 5xx/429 responses are retried with
+   backoff; a per-request timeout guards hung prompts.
+3. **Score.** The app's response runs through every scorer listed in `expected` — exact
+   match, JSON schema, and optionally the LLM judge — all must pass for the case to pass.
+4. **Measure.** Latency per case, plus tokens from the payload (`usage.prompt_tokens`/`usage.completion_tokens`
+   OpenAI-style, or Google Gemini's camelCase `usageMetadata.promptTokenCount`/`candidatesTokenCount`), or an
+   estimate when the app reports none. The model name comes from the `model` field, and for Gemini from
+   `modelVersion` — both are matched against the `pricing` table (USD per 1M tokens).
+5. **Store.** The run + all per-case data go into SQLite at `.benchy/benchy.db` — one row per
+   run, one per case, JSON for scorer details.
+6. **Report.** Terminal table + summary line (pass %, p50/p95 latency, cost, duration), and a
+   stored record for `list` / `show` / `diff` / the dashboard / the baseline check.
+
+That's the whole lifecycle — a run is a stored, diffable snapshot of your app's behavior at a point in time.
+
 ## Getting started
 
 ```bash
 git clone … && cd bench
-npm install
-npm run build
+npm install && npm run build && npm link
 
 benchy init          # writes benchy.yaml
 benchy run --config benchy.yaml
@@ -55,6 +79,50 @@ benchy serve         # open http://localhost:4173
 
 `benchy init` scaffolds a commented `benchy.yaml` with sample cases. Point `target.url` at your
 app and edit `cases:` — done.
+
+## Using benchy in your own repo
+
+You need **one JSON endpoint** (a deployed API, a local server, or a serverless function that
+wraps your AI call). Then:
+
+1. `benchy init` → point `target.url` at it once.
+2. Write cases for the behavior you care about — edge cases, main flows, things your prompt
+   sometimes gets wrong. Plain YAML, no code.
+3. `benchy run --label v0.9-ga` before each release/model swap; commit clean runs.
+4. `benchy diff v0.9 v1.0` whenever you update a prompt or model — see exactly which cases
+   flipped before merging anything.
+5. Once green: `benchy baseline update`, commit, and let the CI workflow gate every PR
+   afterwards. `benchy serve` whenever you want to review history visually.
+
+**The YAML files are the only thing your team ever has to write.** A QA/ML engineer watches
+`list`/`diff` and gates releases; a prompt engineer contributes new cases without touching a
+line of TypeScript; CI does the boring "did anything regress" check for every PR.
+
+## Real-world case: RemoveStAIN (client-side AI)
+
+[removestain.netlify.app](https://removestain.netlify.app/) is a React SPA whose "Analyze Stain"
+button calls Google's **Generative Language API directly from the browser** —
+`POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`
+with the photo + fabric prompt, instructed to answer `application/json` with the app's schema
+(`summary`, `materialsNeeded`, `steps[]`, `additionalTip`). There are **no app-side endpoints**
+to run an eval against — so this repo ships the exact same request as a benchy suite in
+[`examples/removestain/benchy.yaml`](examples/removestain/benchy.yaml):
+
+```bash
+# paste your key into the case's headers, then:
+benchy run --config examples/removestain/benchy.yaml
+```
+
+and benchy measures it for real — a run of the genuine button payload (photo + coffee-on-cotton
+prompt): `1/1 passed · 13.7 s · $0.00313`. The schema scorer asserts the model returned
+non-empty JSON with the app's exact shape; the per-case latency and per-request spend (via
+Gemini's `usageMetadata`, extracted and priced by benchy) show up in the same dashboard as the
+triage demo.
+
+Useful lesson for a client-only app: the API key lives in the public bundle of a static
+site (anyone can read it). If you point benchy at the same endpoint, you're also
+testing _your own model behavior_ — and if a future prompt "helpful suggestion" change
+starts giving wrong advice, `benchy diff` hollers about it before users do.
 
 ## Demo (no API key needed)
 
@@ -100,9 +168,12 @@ retries: 1                          # retries 5xx/429 with backoff
 
 pricing:                            # USD per 1M tokens, keyed by model
   rule-triage-v1: { input: 0.10, output: 0.10 }
+  # gemini-2.5-flash works too — Google Gemini's public list price:
+  #   gemini-2.5-flash: { input: 0.30, output: 2.50 }
 
 judge:                              # optional LLM-as-judge scorer
-  model: gpt-4o-mini                # OpenAI-compatible /chat/completions
+  model: gpt-4o-mini                # OpenAI-compatible /chat/completions (Gemini works
+                                    # via an OpenAI-compatible gateway, e.g. OpenRouter)
   # apiKeyEnv: MY_KEY               # default: OPENAI_API_KEY
 
 imports: [cases.yaml]               # cases can live in separate files
@@ -136,7 +207,8 @@ cases:
   Schemas can be inline YAML or a JSON/YAML string.
 - **judge** — sends the criteria + request/response to the configured judge model and asks
   for a strict `{"passed": bool, "score": 0–100, "reason": string}` verdict (score ≥ 60
-  passes). Uses `OPENAI_API_KEY` (or `judge.apiKeyEnv`) and OpenAI-compatible endpoints.
+  passes). Uses `OPENAI_API_KEY` (or `judge.apiKeyEnv`) and OpenAI-compatible endpoints —
+  Gemini fits through any gateway that speaks that protocol, so you don't need an extra key.
 - Multiple scorers per case — all must pass.
 
 ## CLI

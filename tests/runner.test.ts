@@ -147,6 +147,28 @@ describe('usage + cost helpers', () => {
     expect(extractUsage('str')).toBeUndefined();
   });
 
+  it('extracts Google (Gemini) usageMetadata', () => {
+    expect(
+      extractUsage({
+        usageMetadata: { promptTokenCount: 7, candidatesTokenCount: 1 },
+        model: 'gemini-2.5-flash',
+      }),
+    ).toEqual({ in: 7, out: 1, model: 'gemini-2.5-flash', source: 'app' });
+    expect(extractUsage({ usageMetadata: { promptTokenCount: 3 } })).toEqual({
+      in: 3,
+      out: undefined,
+      model: undefined,
+      source: 'app',
+    });
+    expect(extractUsage({ usageMetadata: {} })).toBeUndefined();
+    expect(
+      extractUsage({
+        usageMetadata: { promptTokenCount: 2, candidatesTokenCount: 558 },
+        modelVersion: 'gemini-2.5-flash',
+      }),
+    ).toEqual({ in: 2, out: 558, model: 'gemini-2.5-flash', source: 'app' });
+  });
+
   it('computes cost from pricing', () => {
     const cfg = { ...config, pricing: { m: { input: 1, output: 2 } } };
     expect(computeCost(cfg, { in: 1_000_000, out: 0, model: 'm', source: 'app' })).toBe(1);

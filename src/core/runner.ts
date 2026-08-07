@@ -132,7 +132,9 @@ function deriveCaseStatus(scorers: CaseOutcome['scorers']): CaseOutcome['status'
 export function extractUsage(payload: unknown): Usage | undefined {
   if (!isPlainObject(payload)) return undefined;
   const usage = payload.usage;
-  if (!isPlainObject(usage)) return undefined;
+  if (!isPlainObject(usage)) {
+    return extractGoogleUsage(payload);
+  }
 
   let inTokens: unknown = usage.prompt_tokens;
   let outTokens: unknown = usage.completion_tokens;
@@ -153,6 +155,27 @@ export function extractUsage(payload: unknown): Usage | undefined {
     model: typeof model === 'string' ? model : undefined,
     source: 'app',
   };
+}
+
+function extractGoogleUsage(payload: Record<string, unknown>): Usage | undefined {
+  const metadata = payload.usageMetadata;
+  if (!isPlainObject(metadata)) return undefined;
+  const inTokens = metadata.promptTokenCount;
+  const outTokens = metadata.candidatesTokenCount;
+  const safeIn: number | undefined =
+    typeof inTokens === 'number' && Number.isFinite(inTokens) ? inTokens : undefined;
+  const safeOut: number | undefined =
+    typeof outTokens === 'number' && Number.isFinite(outTokens) ? outTokens : undefined;
+  if (safeIn === undefined && safeOut === undefined) return undefined;
+  const model =
+    typeof payload.model === 'string'
+      ? payload.model
+      : typeof payload.modelVersion === 'string' && payload.modelVersion.length > 0
+        ? payload.modelVersion
+        : isPlainObject(payload.modelMetadata) && typeof payload.modelMetadata.model === 'string'
+          ? payload.modelMetadata.model
+          : undefined;
+  return { in: safeIn, out: safeOut, model, source: 'app' };
 }
 
 function estimateUsage(
