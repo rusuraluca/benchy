@@ -1,0 +1,58 @@
+# BenchY demo stack:
+#
+#   docker compose up --build            # demo app + dashboard (seeds demo runs)
+#   docker compose --profile evals run --rm evals
+#                                        # one-shot eval + baseline check inside Docker
+#
+# Data persists in the `benchy-data` volume; the dashboard store lives in /.benchy.
+
+services:
+  demo-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.demo-app
+    environment:
+      PORT: 3000
+    ports:
+      - '3000:3000'
+    restart: unless-stopped
+
+  benchy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ['serve', '--demo']
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    ports:
+      - '4173:4173'
+    volumes:
+      - benchy-data:/benchy/.benchy
+    depends_on:
+      demo-app:
+        condition: service_healthy
+    restart: unless-stopped
+
+  evals:
+    profiles: ['evals']
+    build:
+      context: .
+      dockerfile: Dockerfile
+    entrypoint:
+      - node
+      - dist/cli/index.js
+      - baseline
+      - check
+    command:
+      - --config
+      - examples/demo/benchy.yaml
+      - --baseline
+      - benchy-baseline.json
+      - --target
+      - http://demo-app:3000
+    depends_on:
+      demo-app:
+        condition: service_healthy
+
+volumes:
+  benchy-data:

@@ -1,0 +1,46 @@
+{
+  "benchy": 1,
+  "updatedAt": "2026-08-07T22:39:19.898Z",
+  "label": "v1.0",
+  "targetPassRate": 1,
+  "summary": {
+    "total": 8,
+    "passRate": 1,
+    "p50LatencyMs": 30.6,
+    "totalCostUsd": 0.000128
+  },
+  "cases": {
+    "triage-simple-complaint": {
+      "status": "passed",
+      "medianLatencyMs": 49.59266600000001
+    },
+    "triage-billing-refund": {
+      "status": "passed",
+      "medianLatencyMs": 30.272790999999984
+    },
+    "triage-urgent-outage": {
+      "status": "passed",
+      "medianLatencyMs": 34.192916999999994
+    },
+    "triage-account-lockout": {
+      "status": "passed",
+      "medianLatencyMs": 30.58054200000001
+    },
+    "triage-feature-request": {
+      "status": "passed",
+      "medianLatencyMs": 14.655957999999998
+    },
+    "triage-multi-issue": {
+      "status": "passed",
+      "medianLatencyMs": 9.049667
+    },
+    "schema-decision-shape": {
+      "status": "passed",
+      "medianLatencyMs": 14.104833999999983
+    },
+    "judge-handoff-quality": {
+      "status": "passed",
+      "medianLatencyMs": 36.271792000000005
+    }
+  }
+}
