@@ -1,0 +1,73 @@
+name: 'Run benchy evals'
+description: >
+  Build the CLI and the demo app, start the app, run the eval suite and check
+  the committed baseline (exit 1 on regressions or target pass-rate miss).
+inputs:
+  suite:
+    description: Path to the benchy.yaml suite to run
+    required: false
+    default: examples/demo/benchy.yaml
+  baseline:
+    description: Path to the baseline file to check against
+    required: false
+    default: benchy-baseline.json
+  benchy-dir:
+    description: Where the run store lives
+    required: false
+    default: .benchy
+  node-version:
+    description: Node version to use
+    required: false
+    default: '20'
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: npm
+
+    - name: Install and build benchy
+      shell: bash
+      run: |
+        npm ci
+        npm run build
+
+    - name: Build demo app
+      shell: bash
+      run: npx tsc -p examples/demo-app/tsconfig.json
+
+    - name: Start demo app
+      shell: bash
+      env:
+        PORT: 3000
+      run: |
+        node examples/demo-app/dist/server.js &
+        echo "pid=$!" >> "$GITHUB_ENV"
+        for i in $(seq 1 30); do
+          if node -e "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then
+            echo "demo app ready"
+            exit 0
+          fi
+          sleep 1
+        done
+        echo "demo app failed to start" >&2
+        exit 1
+
+    - name: Run evals against baseline
+      shell: bash
+      env:
+        SUITE: ${{ inputs.suite }}
+        BASELINE: ${{ inputs.baseline }}
+        BENCHY_DIR: ${{ inputs.benchy-dir }}
+      run: |
+        node dist/cli/index.js baseline check \
+          --config "$SUITE" \
+          --baseline "$BASELINE" \
+          --dir "$BENCHY_DIR"
+
+    - name: Stop demo app
+      if: always()
+      shell: bash
+      run: kill ${{ env.pid }} 2>/dev/null || true
