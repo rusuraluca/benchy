@@ -180,10 +180,12 @@ async function compareView() {
   location.hash = `#/compare/${a}..${b}`;
 }
 
-async function renderCompare(fromId, toId, runs) {
-  const { comparison: c } = await api(
-    `/api/compare?from=${encodeURIComponent(fromId)}&to=${encodeURIComponent(toId)}`,
-  );
+async function renderCompare(fromId, toId, runs = []) {
+  const [{ comparison: c }, { runs: refs }] = await Promise.all([
+    api(`/api/compare?from=${encodeURIComponent(fromId)}&to=${encodeURIComponent(toId)}`),
+    api('/api/refs'),
+  ]);
+  if (runs.length === 0) runs = refs;
   suiteEl.textContent = `${c.a.label} → ${c.b.label}`;
 
   const order = { regressed: 0, fixed: 1, 'latency-regression': 2, added: 3, removed: 4 };

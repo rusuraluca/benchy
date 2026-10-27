@@ -1,0 +1,85 @@
+# benchy example for the "Remove stAIn" AI app (client-side, React + @google/genai)
+#
+# Background:
+#   removestain.netlify.app is a static SPA — the model call happens IN THE BROWSER.
+#   Clicking "Analyze Stain" POSTs straight to Google's Generative Language API
+#   with the photo + prompt. There is no backend endpoint to hit, so benchy talks
+#   to the same API the button uses, directly.
+#
+# The button actually triggers:
+#   POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent
+#   headers: x-goog-api-key: <api key>
+#   body: contents[{ parts: [ image (inlineData), prompt-text ] }]
+#         generationConfig: { responseMimeType: "application/json", responseSchema }
+#
+# Run it (put your key from the netlify app settings / the site bundle):
+#   benchy --config examples/removestain/benchy.yaml
+
+name: removestain-live
+
+target:
+  url: https://generativelanguage.googleapis.com
+  model: gemini-2.5-flash
+
+timeoutMs: 60000
+
+pricing: # current public list price for Gemini 2.5 Flash ($/1M tokens)
+  gemini-2.5-flash:
+    input: 0.30
+    output: 2.50
+
+cases:
+  - id: analyze-stain-coffee-cotton
+    name: 'Analyze stain: coffee on cotton'
+    method: POST
+    path: /v1beta/models/gemini-2.5-flash:generateContent
+    headers:
+      x-goog-api-key: PASTE_YOUR_KEY_HERE
+    input:
+      contents:
+        - parts:
+            - inlineData:
+                mimeType: image/jpeg
+                data: /9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP/2wBDAf/wAARCAABAAED/qAFBAB/9oADAMBAAIQAxAAAAF/9//8QAFBAB/9k=
+            - text: >
+                Analyze the stain in this photo for removal.
+                Fabric composition: Cotton 100%.
+                Context: spilled coffee on it at work.
+                Keep the entire response as JSON.
+    generationConfig:
+      responseMimeType: application/json
+      responseSchema:
+        type: object
+        required: [summary, materialsNeeded, steps, additionalTip]
+        properties:
+          summary: { type: string }
+          materialsNeeded: { type: array, items: { type: string } }
+          steps:
+            type: array
+            items:
+              type: object
+              required: [title, description]
+              properties:
+                title: { type: string }
+                description: { type: string }
+          additionalTip: { type: string }
+    expected:
+      schema:
+        type: object
+        required: [candidates, usageMetadata]
+        properties:
+          candidates:
+            type: array
+            minItems: 1
+            items:
+              type: object
+              required: [content]
+              properties:
+                content:
+                  type: object
+                  required: [parts]
+                  properties:
+                    parts: { type: array, minItems: 1, items: { type: object } }
+          usageMetadata:
+            type: object
+            required: [promptTokenCount, candidatesTokenCount]
