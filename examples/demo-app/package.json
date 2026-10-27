@@ -1,0 +1,15 @@
+{
+  "name": "demo-triage-app",
+  "version": "1.4.0",
+  "private": true,
+  "type": "module",
+  "description": "Demo LLM app for BenchY: rule-based support-ticket triage with an OpenAI-shaped response contract.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.2"
+  }
+}

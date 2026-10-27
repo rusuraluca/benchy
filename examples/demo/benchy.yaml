@@ -1,0 +1,29 @@
+# BenchY example suite for the demo support-triage app.
+#
+# Run:          benchy run --config examples/demo/benchy.yaml
+# Against app:  node examples/demo-app/dist/server.js (default http://localhost:3000)
+# Or with Docker: docker compose up demo-app
+
+name: support-triage-demo
+
+target:
+  url: http://localhost:3000
+  model: rule-triage-v1
+
+concurrency: 4
+timeoutMs: 10000
+retries: 1
+
+pricing:
+  rule-triage-v1:
+    input: 0.10
+    output: 0.10
+  gpt-4o-mini:
+    input: 0.15
+    output: 0.60
+
+judge:
+  model: gpt-4o-mini
+
+imports:
+  - cases.yaml

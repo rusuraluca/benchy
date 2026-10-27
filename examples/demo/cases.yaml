@@ -1,0 +1,112 @@
+# Test cases for the support-triage demo app.
+# Each case posts {"message": ...} to /v1/triage and asserts on the response.
+
+- id: triage-simple-complaint
+  name: 'Triage: simple complaint'
+  method: POST
+  path: /v1/triage
+  input:
+    message: 'You charged me twice this month.'
+  expected:
+    output:
+      category: billing
+      priority: medium
+      sentiment: negative
+
+- id: triage-billing-refund
+  name: 'Triage: billing refund request'
+  method: POST
+  path: /v1/triage
+  input:
+    message: 'I want a refund for the last invoice.'
+  expected:
+    output:
+      category: billing
+      priority: medium
+
+- id: triage-urgent-outage
+  name: 'Triage: urgent outage report'
+  method: POST
+  path: /v1/triage
+  input:
+    message: 'Your service is down for our whole team, we are losing money right now.'
+  expected:
+    output:
+      category: bug
+      priority: urgent
+      sentiment: negative
+
+- id: triage-account-lockout
+  name: 'Triage: account lockout'
+  method: POST
+  path: /v1/triage
+  input:
+    message: 'I cannot log in anymore, 2FA keeps failing.'
+  expected:
+    output:
+      category: account
+      priority: high
+
+- id: triage-feature-request
+  name: 'Triage: feature request'
+  method: POST
+  path: /v1/triage
+  input:
+    message: 'Please add dark mode to the dashboard.'
+  expected:
+    output:
+      category: feature
+      sentiment: positive
+
+- id: triage-multi-issue
+  name: 'Triage: multi-issue email'
+  method: POST
+  path: /v1/triage
+  input:
+    message: 'Billing is broken and the mobile app crashes on startup.'
+  expected:
+    output:
+      category: bug
+      priority: high
+
+- id: schema-decision-shape
+  name: 'Schema: decision shape'
+  method: POST
+  path: /v1/triage
+  input:
+    message: 'Critical: our API calls fail with 503 every afternoon.'
+  expected:
+    schema:
+      type: object
+      required: [category, priority, sentiment, summary, model, usage]
+      additionalProperties: false
+      properties:
+        category: { type: string, enum: [billing, bug, account, feature] }
+        priority: { type: string, enum: [low, medium, high, urgent] }
+        sentiment: { type: string, enum: [positive, neutral, negative] }
+        summary: { type: string }
+        model: { type: string }
+        usage:
+          type: object
+          required: [prompt_tokens, completion_tokens, total_tokens]
+          properties:
+            prompt_tokens: { type: integer }
+            completion_tokens: { type: integer }
+            total_tokens: { type: integer }
+
+- id: judge-handoff-quality
+  name: 'Judge: handoff message quality'
+  method: POST
+  path: /v1/triage
+  input:
+    message: 'Everything broke after the latest update.'
+  expected:
+    judge:
+      criteria: >
+        The summary is the handoff to a support engineer. It must be professional,
+        specific about the symptom and impact, and name a concrete next step.
+        A generic one-liner that only echoes the category is a fail.
+      required: false # runs only when OPENAI_API_KEY is set
+    schema:
+      type: object
+      required: [category, priority, sentiment, summary]
